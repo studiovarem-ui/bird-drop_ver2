@@ -585,11 +585,17 @@
         // ============================================
 
         function drawButton(x, y, w, h, text, active = false, enabled = true) {
-            const color = !enabled ? '#444' : active ? '#FFD700' : '#666';
-            const textColor = !enabled ? '#666' : '#FFF';
+            const color = !enabled ? '#555' : active ? '#FFD700' : '#4a7c59';
+            const textColor = !enabled ? '#888' : '#FFF';
 
-            drawPixelRect(x, y, w, h, '#222');
-            drawPixelRect(x + 2, y + 2, w - 4, h - 4, color);
+            // Button shadow
+            drawPixelRect(x + 3, y + 3, w, h, 'rgba(0,0,0,0.3)');
+            // Button border
+            drawPixelRect(x, y, w, h, '#1a1a1a');
+            // Button fill
+            drawPixelRect(x + 3, y + 3, w - 6, h - 6, color);
+            // Button highlight
+            drawPixelRect(x + 3, y + 3, w - 6, 4, 'rgba(255,255,255,0.2)');
 
             ctx.fillStyle = textColor;
             ctx.font = `bold ${h * 0.4}px monospace`;
@@ -688,7 +694,7 @@
             canvas.style.height = H + 'px';
             ctx.setTransform(1, 0, 0, 1, 0, 0);
             ctx.scale(dpr, dpr);
-            scale = Math.min(W / 360, H / 640);
+            scale = Math.max(0.5, Math.min(W / 360, H / 640));
 
             if (bird.x === 0) {
                 bird.x = W / 2;
