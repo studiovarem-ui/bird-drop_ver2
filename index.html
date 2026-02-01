@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BIRD DROP</title>
+    <title>BIRD DROP ver2</title>
     <style>
         * {
             margin: 0;
@@ -19,6 +19,7 @@
             height: 100%;
             overflow: hidden;
             background: #000;
+            font-family: monospace;
         }
         #gameCanvas {
             display: block;
@@ -33,47 +34,216 @@
     <canvas id="gameCanvas"></canvas>
     <script>
         // ============================================
-        // BIRD DROP - MVP Version
+        // BIRD DROP ver2 - Full Version
         // ============================================
 
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game constants
-        const BIRD_AREA_PERCENT = 0.35;
-        const GROUND_HEIGHT = 60;
-        const POOP_SPEED = 8;
-        const HUMAN_SPAWN_INTERVAL = 1500;
-        const ENERGY_MAX = 100;
-        const ENERGY_COST = 8;
-        const ENERGY_REGEN = 0.5;
-        const COMBO_TIMEOUT = 2000;
+        // ============================================
+        // GAME CONSTANTS
+        // ============================================
 
-        // Game state
-        let gameState = 'MENU'; // MENU, PLAYING, GAME_OVER
+        const BIRD_AREA_PERCENT = 0.35;
+        const GROUND_HEIGHT = 80;
+        const POOP_BASE_SPEED = 7;
+        const ENERGY_MAX_BASE = 100;
+        const ENERGY_COST = 6;
+        const ENERGY_REGEN = 0.4;
+        const COMBO_TIMEOUT = 2000;
+        const POOP_COOLDOWN = 120;
+
+        // ============================================
+        // STAGE DEFINITIONS
+        // ============================================
+
+        const STAGES = [
+            {
+                name: 'PARK',
+                nameKr: '공원',
+                duration: 90,
+                skyTop: '#87CEEB',
+                skyBottom: '#98FB98',
+                ground: '#8FBC8F',
+                path: '#D2B48C',
+                humanTypes: [0, 2, 3],
+                spawnInterval: 1800,
+                boss: 0
+            },
+            {
+                name: 'CITY',
+                nameKr: '도시',
+                duration: 100,
+                skyTop: '#708090',
+                skyBottom: '#B0C4DE',
+                ground: '#696969',
+                path: '#505050',
+                humanTypes: [0, 1, 4, 6],
+                spawnInterval: 1600,
+                boss: 1
+            },
+            {
+                name: 'BEACH',
+                nameKr: '해변',
+                duration: 100,
+                skyTop: '#00BFFF',
+                skyBottom: '#FFE4B5',
+                ground: '#F4A460',
+                path: '#FFECD2',
+                humanTypes: [0, 2, 5, 7],
+                spawnInterval: 1500,
+                boss: 2
+            },
+            {
+                name: 'STADIUM',
+                nameKr: '운동장',
+                duration: 110,
+                skyTop: '#87CEEB',
+                skyBottom: '#90EE90',
+                ground: '#228B22',
+                path: '#8B4513',
+                humanTypes: [1, 5, 6, 0],
+                spawnInterval: 1400,
+                boss: 3
+            },
+            {
+                name: 'CASTLE',
+                nameKr: '성',
+                duration: 120,
+                skyTop: '#4B0082',
+                skyBottom: '#9370DB',
+                ground: '#696969',
+                path: '#484848',
+                humanTypes: [4, 3, 0, 7],
+                spawnInterval: 1300,
+                boss: 4
+            },
+            {
+                name: 'VOLCANO',
+                nameKr: '화산',
+                duration: 130,
+                skyTop: '#8B0000',
+                skyBottom: '#FF4500',
+                ground: '#1a1a1a',
+                path: '#8B0000',
+                humanTypes: [1, 5, 7, 0, 4],
+                spawnInterval: 1200,
+                boss: 5
+            }
+        ];
+
+        // ============================================
+        // BIRD DEFINITIONS
+        // ============================================
+
+        const BIRDS = [
+            { name: 'Sparrow', color: '#A0722A', accent: '#D4A656', speed: 1.0, damage: 1.0, cost: 0 },
+            { name: 'Pigeon', color: '#808080', accent: '#DDA0DD', speed: 1.1, damage: 1.1, cost: 5 },
+            { name: 'Crow', color: '#1a1a1a', accent: '#4a4a4a', speed: 1.2, damage: 1.2, cost: 10 },
+            { name: 'Eagle', color: '#8B4513', accent: '#DAA520', speed: 1.3, damage: 1.4, cost: 20 },
+            { name: 'Archaeopteryx', color: '#20B2AA', accent: '#48D1CC', speed: 1.4, damage: 1.6, cost: 35 },
+            { name: 'Phoenix', color: '#FF4500', accent: '#FFD700', speed: 1.5, damage: 2.0, cost: 50 }
+        ];
+
+        // ============================================
+        // HUMAN DEFINITIONS
+        // ============================================
+
+        const HUMANS = [
+            { name: 'Normal', color: '#FFB6C1', pants: '#4169E1', speed: 1.5, points: 10 },
+            { name: 'Runner', color: '#32CD32', pants: '#1a1a1a', speed: 3.0, points: 25 },
+            { name: 'Child', color: '#FFD700', pants: '#4169E1', speed: 2.0, points: 20 },
+            { name: 'OldMan', color: '#D2B48C', pants: '#696969', speed: 1.0, points: 15 },
+            { name: 'Lady', color: '#FF69B4', pants: '#FF69B4', speed: 1.5, points: 15 },
+            { name: 'Athlete', color: '#FF8C00', pants: '#FF8C00', speed: 3.5, points: 30 },
+            { name: 'Student', color: '#F5F5F5', pants: '#1a1a1a', speed: 1.8, points: 20 },
+            { name: 'Tourist', color: '#FFFF00', pants: '#FF6347', speed: 1.3, points: 15 }
+        ];
+
+        // ============================================
+        // BOSS DEFINITIONS
+        // ============================================
+
+        const BOSSES = [
+            { name: 'Cleaner', color: '#228B22', hp: 100, fireRate: 2000, speed: 1.5 },
+            { name: 'Dog', color: '#D2691E', hp: 120, fireRate: 1800, speed: 2.0 },
+            { name: 'Cat', color: '#808080', hp: 130, fireRate: 1500, speed: 2.5 },
+            { name: 'Guard', color: '#1a1a1a', hp: 150, fireRate: 1600, speed: 1.8 },
+            { name: 'Witch', color: '#800080', hp: 180, fireRate: 1200, speed: 2.0 },
+            { name: 'Dragon', color: '#FF0000', hp: 250, fireRate: 1000, speed: 2.2 }
+        ];
+
+        // ============================================
+        // SHOP DEFINITIONS
+        // ============================================
+
+        const SHOP_ITEMS = [
+            { name: 'Bread', icon: 'bread', price: 30, currency: 'feathers', desc: '+1 HP' },
+            { name: 'Chili', icon: 'chili', price: 50, currency: 'feathers', desc: '8s Unlimited' },
+            { name: 'Shield', icon: 'shield', price: 60, currency: 'feathers', desc: 'Block 1 hit' }
+        ];
+
+        const SHOP_UPGRADES = [
+            { name: 'Energy', icon: 'energy', basePrice: 50, currency: 'gems', maxLevel: 5, desc: '+20 Max Energy' },
+            { name: 'Speed', icon: 'speed', basePrice: 60, currency: 'gems', maxLevel: 5, desc: '+10% Move Speed' },
+            { name: 'PoopSpeed', icon: 'poop', basePrice: 70, currency: 'gems', maxLevel: 5, desc: '+15% Poop Speed' },
+            { name: 'Damage', icon: 'damage', basePrice: 80, currency: 'gems', maxLevel: 5, desc: '+20% Damage' },
+            { name: 'Luck', icon: 'luck', basePrice: 100, currency: 'gems', maxLevel: 5, desc: '+5% Drop Rate' }
+        ];
+
+        // ============================================
+        // GAME STATE
+        // ============================================
+
+        let gameState = 'MENU';
+        let currentStage = 0;
+        let stageTime = 0;
+        let stageStartTime = 0;
         let score = 0;
         let combo = 0;
         let lastHitTime = 0;
-        let highScore = 0;
+        let isHellMode = false;
 
-        // Canvas sizing
-        let W, H;
-        let scale = 1;
-
-        // Bird
-        const bird = {
-            x: 0,
-            y: 0,
-            width: 24,
-            height: 24,
-            energy: ENERGY_MAX,
-            hp: 3
+        // Save data
+        let saveData = {
+            feathers: 100,
+            gems: 20,
+            stones: 0,
+            currentBird: 0,
+            unlockedBirds: [true, false, false, false, false, false],
+            unlockedStages: 1,
+            stageStars: [0, 0, 0, 0, 0, 0],
+            upgrades: { energy: 0, speed: 0, poopSpeed: 0, damage: 0, luck: 0 },
+            items: { bread: 1, chili: 1, shield: 1 },
+            highScore: 0
         };
 
-        // Arrays
+        // Canvas
+        let W, H, scale;
+
+        // Bird state
+        const bird = {
+            x: 0, y: 0,
+            width: 24, height: 24,
+            energy: ENERGY_MAX_BASE,
+            maxEnergy: ENERGY_MAX_BASE,
+            hp: 3, maxHp: 3,
+            shieldActive: false,
+            chiliActive: false,
+            chiliEndTime: 0
+        };
+
+        // Game objects
         let poops = [];
         let humans = [];
         let particles = [];
+        let projectiles = [];
+        let floatingTexts = [];
+
+        // Boss state
+        let boss = null;
+        let bossWarningShown = false;
+        let bossSpawned = false;
 
         // Touch controls
         let touchLeft = null;
@@ -82,207 +252,430 @@
         let joystickPos = { x: 0, y: 0 };
         let isPooping = false;
         let lastPoopTime = 0;
-        const POOP_COOLDOWN = 150;
-
-        // Timers
         let lastHumanSpawn = 0;
 
-        // ============================================
-        // PIXEL ART SPRITES
-        // ============================================
+        // Shop state
+        let shopTab = 0;
+        let shopScroll = 0;
 
-        // Bird sprite (24x24) - cute brown sparrow
-        const BIRD_SPRITE = [
-            '........####............',
-            '......##BBBB##..........',
-            '.....#BBBBBBBB#.........',
-            '....#BBBBBBBBBB#........',
-            '...#BBBWWBBBBBB#........',
-            '...#BBWWWWBBBBB##.......',
-            '..#BBBWWKKBBBBBB#.......',
-            '..#BBBBKKBBBBBBB#.......',
-            '..#BBBBBBBBBBBBB#.......',
-            '..#BBBBBBBBBOOOOB#......',
-            '..#BBBBBBBBOOOOOOB#.....',
-            '...#BBBBBBBOOOOOBB#.....',
-            '...#BBBBBBBBOOOBBB#.....',
-            '....#BBBBBBBBBBBB#......',
-            '....#BBBBBBBBBBB#.......',
-            '.....#BBBBBBBBBB#.......',
-            '......#BBBBBBBB#........',
-            '.......##BBBB##.........',
-            '.........#BB#...........',
-            '........#OOOOO#.........',
-            '........#OO#OO#.........',
-            '.........##.##..........',
-            '........................',
-            '........................'
-        ];
-
-        // Human sprite (16x32) - walking person
-        const HUMAN_SPRITES = [
-            // Type 0: Normal person (pink shirt)
-            [
-                '......####......',
-                '....########....',
-                '...##SSSSSS##...',
-                '...#SSSSSSSS#...',
-                '...#SSSSSSSS#...',
-                '....##SSSS##....',
-                '.....#SSSS#.....',
-                '....########....',
-                '...#PPPPPPPP#...',
-                '..#PPPPPPPPPP#..',
-                '..#PPPPPPPPPP#..',
-                '..#SSPPPPPPSS#..',
-                '...#PPPPPPPP#...',
-                '...#PPPPPPPP#...',
-                '....#PPPPPP#....',
-                '....#PPPPPP#....',
-                '....#PPPPPP#....',
-                '.....#NNNN#.....',
-                '.....#NNNN#.....',
-                '.....#N##N#.....',
-                '....#NN##NN#....',
-                '....#NN##NN#....',
-                '....#NN..NN#....',
-                '.....##..##.....',
-                '.....##..##.....',
-                '....#KK..KK#....',
-                '....#KK..KK#....',
-                '...#KKK..KKK#...',
-                '...#KKK..KKK#...',
-                '...####..####...',
-                '................',
-                '................'
-            ],
-            // Type 1: Runner (green)
-            [
-                '......####......',
-                '....########....',
-                '...##SSSSSS##...',
-                '...#SSSSSSSS#...',
-                '...#SSSSSSSS#...',
-                '....##SSSS##....',
-                '.....#SSSS#.....',
-                '....########....',
-                '...#GGGGGGGG#...',
-                '..#GGGGGGGGGG#..',
-                '..#GGGGGGGGGG#..',
-                '..#SSGGGGGGSS#..',
-                '...#GGGGGGGG#...',
-                '...#GGGGGGGG#...',
-                '....#GGGGGG#....',
-                '....#GGGGGG#....',
-                '....#GGGGGG#....',
-                '.....#NNNN#.....',
-                '.....#NNNN#.....',
-                '.....#N##N#.....',
-                '....#NN##NN#....',
-                '....#NN##NN#....',
-                '....#NN..NN#....',
-                '.....##..##.....',
-                '.....##..##.....',
-                '....#WW..WW#....',
-                '....#WW..WW#....',
-                '...#WWW..WWW#...',
-                '...#WWW..WWW#...',
-                '...####..####...',
-                '................',
-                '................'
-            ],
-            // Type 2: Child (yellow)
-            [
-                '......####......',
-                '....########....',
-                '...##YYYY####...',
-                '...#SSSSSSSS#...',
-                '...#SSSSSSSS#...',
-                '....##SSSS##....',
-                '.....#SSSS#.....',
-                '....########....',
-                '...#YYYYYYYY#...',
-                '..#YYYYYYYYYY#..',
-                '..#YYYYYYYYYY#..',
-                '..#SSYYYYYYSS#..',
-                '...#YYYYYYYY#...',
-                '...#YYYYYYYY#...',
-                '....#YYYYYY#....',
-                '....#YYYYYY#....',
-                '....#YYYYYY#....',
-                '.....#NNNN#.....',
-                '.....#NNNN#.....',
-                '.....#N##N#.....',
-                '....#NN##NN#....',
-                '....#NN##NN#....',
-                '....#NN..NN#....',
-                '.....##..##.....',
-                '.....##..##.....',
-                '....#RR..RR#....',
-                '....#RR..RR#....',
-                '...#RRR..RRR#...',
-                '...#RRR..RRR#...',
-                '...####..####...',
-                '................',
-                '................'
-            ]
-        ];
-
-        // Poop sprite (8x8)
-        const POOP_SPRITE = [
-            '...##...',
-            '..####..',
-            '.#CC###.',
-            '#CCCCCC#',
-            '#CCBBCC#',
-            '#CCCCCC#',
-            '.#CCCC#.',
-            '..####..'
-        ];
-
-        // Color palette
-        const COLORS = {
-            '.': 'transparent',
-            '#': '#2a1a0a',
-            'B': '#A0722A',
-            'W': '#FFFFFF',
-            'K': '#000000',
-            'O': '#FF8C00',
-            'S': '#FFDAB9',
-            'P': '#FFB6C1',
-            'G': '#32CD32',
-            'Y': '#FFD700',
-            'N': '#4169E1',
-            'R': '#FF4444',
-            'C': '#8B4513',
-            'b': '#654321',
-            'w': '#EEEEEE'
-        };
+        // UI buttons
+        let buttons = [];
 
         // ============================================
-        // SPRITE RENDERING
+        // AUDIO SYSTEM
         // ============================================
 
-        function drawSprite(sprite, x, y, pixelSize, colors = COLORS) {
-            for (let row = 0; row < sprite.length; row++) {
-                for (let col = 0; col < sprite[row].length; col++) {
-                    const char = sprite[row][col];
-                    const color = colors[char];
-                    if (color && color !== 'transparent') {
-                        ctx.fillStyle = color;
-                        ctx.fillRect(
-                            Math.floor(x + col * pixelSize),
-                            Math.floor(y + row * pixelSize),
-                            pixelSize,
-                            pixelSize
-                        );
-                    }
-                }
+        let audioCtx = null;
+
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            switch(type) {
+                case 'poop':
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                    break;
+                case 'hit':
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(200, now + 0.15);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                    break;
+                case 'combo':
+                    osc.frequency.setValueAtTime(600 + combo * 50, now);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now);
+                    osc.stop(now + 0.1);
+                    break;
+                case 'hurt':
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(150, now);
+                    osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                    osc.start(now);
+                    osc.stop(now + 0.3);
+                    break;
+                case 'warning':
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(200, now);
+                    osc.frequency.setValueAtTime(150, now + 0.2);
+                    osc.frequency.setValueAtTime(200, now + 0.4);
+                    gain.gain.setValueAtTime(0.3, now);
+                    gain.gain.setValueAtTime(0.3, now + 0.5);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
+                    osc.start(now);
+                    osc.stop(now + 0.6);
+                    break;
+                case 'bossHit':
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(100, now + 0.2);
+                    gain.gain.setValueAtTime(0.4, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                    break;
+                case 'victory':
+                    const notes = [523, 659, 784, 1047];
+                    notes.forEach((freq, i) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.frequency.setValueAtTime(freq, now + i * 0.15);
+                        g.gain.setValueAtTime(0.2, now + i * 0.15);
+                        g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.2);
+                        o.start(now + i * 0.15);
+                        o.stop(now + i * 0.15 + 0.2);
+                    });
+                    break;
+                case 'item':
+                    osc.frequency.setValueAtTime(800, now);
+                    osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                    break;
+                case 'buy':
+                    osc.frequency.setValueAtTime(500, now);
+                    osc.frequency.setValueAtTime(700, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now);
+                    osc.stop(now + 0.2);
+                    break;
             }
         }
 
         // ============================================
-        // RESIZE HANDLER
+        // SAVE/LOAD SYSTEM
+        // ============================================
+
+        function saveGame() {
+            localStorage.setItem('birdDropSave', JSON.stringify(saveData));
+        }
+
+        function loadGame() {
+            const saved = localStorage.getItem('birdDropSave');
+            if (saved) {
+                const loaded = JSON.parse(saved);
+                saveData = { ...saveData, ...loaded };
+            }
+        }
+
+        // ============================================
+        // SPRITE DRAWING
+        // ============================================
+
+        function drawPixelRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(Math.floor(x), Math.floor(y), Math.ceil(w), Math.ceil(h));
+        }
+
+        function drawBirdSprite(x, y, birdType, size) {
+            const b = BIRDS[birdType];
+            const s = size;
+            const color = b.color;
+            const accent = b.accent;
+
+            // Body
+            drawPixelRect(x - s*0.4, y - s*0.3, s*0.8, s*0.6, color);
+            drawPixelRect(x - s*0.5, y - s*0.2, s, s*0.4, color);
+
+            // Head
+            drawPixelRect(x - s*0.3, y - s*0.5, s*0.5, s*0.35, color);
+
+            // Eye white
+            drawPixelRect(x - s*0.15, y - s*0.45, s*0.15, s*0.12, '#FFF');
+            // Eye pupil
+            drawPixelRect(x - s*0.08, y - s*0.43, s*0.06, s*0.08, '#000');
+
+            // Beak
+            drawPixelRect(x + s*0.1, y - s*0.35, s*0.2, s*0.1, '#FF8C00');
+            drawPixelRect(x + s*0.15, y - s*0.28, s*0.15, s*0.08, '#FF8C00');
+
+            // Wing
+            drawPixelRect(x - s*0.35, y - s*0.1, s*0.3, s*0.35, accent);
+
+            // Tail
+            drawPixelRect(x - s*0.6, y - s*0.15, s*0.2, s*0.25, accent);
+
+            // Feet
+            drawPixelRect(x - s*0.15, y + s*0.25, s*0.08, s*0.15, '#FF8C00');
+            drawPixelRect(x + s*0.08, y + s*0.25, s*0.08, s*0.15, '#FF8C00');
+
+            // Phoenix fire effect
+            if (birdType === 5) {
+                const time = Date.now() / 100;
+                for (let i = 0; i < 5; i++) {
+                    const fx = x - s*0.5 - Math.sin(time + i) * s*0.1;
+                    const fy = y + Math.cos(time + i*0.5) * s*0.1;
+                    const fsize = s * 0.15 * (1 + Math.sin(time + i*0.3) * 0.3);
+                    ctx.fillStyle = i % 2 === 0 ? '#FF4500' : '#FFD700';
+                    ctx.beginPath();
+                    ctx.arc(fx, fy, fsize, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+
+        function drawHumanSprite(x, y, humanType, size, hit = false) {
+            const h = HUMANS[humanType];
+            const s = size;
+            const skinColor = '#FFDAB9';
+            const clothColor = hit ? '#888' : h.color;
+            const pantsColor = hit ? '#666' : h.pants;
+
+            // Head
+            drawPixelRect(x - s*0.15, y, s*0.3, s*0.25, skinColor);
+
+            // Hair (varies by type)
+            if (humanType === 3) { // Old man - white hair
+                drawPixelRect(x - s*0.15, y - s*0.05, s*0.3, s*0.1, '#FFF');
+            } else if (humanType === 2) { // Child - cap
+                drawPixelRect(x - s*0.2, y - s*0.08, s*0.4, s*0.12, '#FFD700');
+            } else {
+                drawPixelRect(x - s*0.15, y - s*0.03, s*0.3, s*0.08, '#4a3728');
+            }
+
+            // Body/Shirt
+            drawPixelRect(x - s*0.2, y + s*0.25, s*0.4, s*0.35, clothColor);
+
+            // Arms
+            drawPixelRect(x - s*0.3, y + s*0.28, s*0.1, s*0.25, skinColor);
+            drawPixelRect(x + s*0.2, y + s*0.28, s*0.1, s*0.25, skinColor);
+
+            // Pants
+            drawPixelRect(x - s*0.18, y + s*0.6, s*0.15, s*0.25, pantsColor);
+            drawPixelRect(x + s*0.03, y + s*0.6, s*0.15, s*0.25, pantsColor);
+
+            // Feet
+            drawPixelRect(x - s*0.2, y + s*0.85, s*0.15, s*0.1, '#333');
+            drawPixelRect(x + s*0.05, y + s*0.85, s*0.15, s*0.1, '#333');
+
+            // Hit splat
+            if (hit) {
+                drawPixelRect(x - s*0.15, y + s*0.1, s*0.3, s*0.2, '#8B4513');
+            }
+        }
+
+        function drawBossSprite(x, y, bossType, size, hp, maxHp) {
+            const b = BOSSES[bossType];
+            const s = size;
+            const color = b.color;
+
+            // Body (larger than humans)
+            if (bossType === 1 || bossType === 2) {
+                // Dog or Cat - quadruped
+                drawPixelRect(x - s*0.5, y + s*0.3, s, s*0.4, color);
+                drawPixelRect(x - s*0.6, y + s*0.1, s*0.3, s*0.35, color);
+                // Legs
+                drawPixelRect(x - s*0.45, y + s*0.65, s*0.12, s*0.25, color);
+                drawPixelRect(x - s*0.15, y + s*0.65, s*0.12, s*0.25, color);
+                drawPixelRect(x + s*0.15, y + s*0.65, s*0.12, s*0.25, color);
+                drawPixelRect(x + s*0.35, y + s*0.65, s*0.12, s*0.25, color);
+                // Eyes
+                drawPixelRect(x - s*0.5, y + s*0.15, s*0.1, s*0.1, '#FFF');
+                drawPixelRect(x - s*0.47, y + s*0.17, s*0.05, s*0.06, '#000');
+                // Tail
+                if (bossType === 2) {
+                    drawPixelRect(x + s*0.45, y + s*0.2, s*0.2, s*0.08, color);
+                }
+            } else if (bossType === 5) {
+                // Dragon
+                drawPixelRect(x - s*0.5, y + s*0.2, s, s*0.5, color);
+                drawPixelRect(x - s*0.6, y, s*0.35, s*0.4, color);
+                // Wings
+                drawPixelRect(x - s*0.3, y - s*0.2, s*0.6, s*0.25, '#8B0000');
+                // Horns
+                drawPixelRect(x - s*0.55, y - s*0.1, s*0.08, s*0.15, '#FFD700');
+                drawPixelRect(x - s*0.35, y - s*0.1, s*0.08, s*0.15, '#FFD700');
+                // Eyes
+                drawPixelRect(x - s*0.5, y + s*0.1, s*0.12, s*0.1, '#FFD700');
+                // Fire
+                const time = Date.now() / 100;
+                for (let i = 0; i < 3; i++) {
+                    ctx.fillStyle = ['#FF0000', '#FF4500', '#FFD700'][i];
+                    ctx.beginPath();
+                    ctx.arc(x - s*0.7 - i*s*0.1, y + s*0.2 + Math.sin(time+i)*s*0.05, s*0.08, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            } else {
+                // Humanoid bosses
+                // Head
+                drawPixelRect(x - s*0.2, y, s*0.4, s*0.3, '#FFDAB9');
+                // Body
+                drawPixelRect(x - s*0.3, y + s*0.3, s*0.6, s*0.4, color);
+                // Legs
+                drawPixelRect(x - s*0.25, y + s*0.7, s*0.2, s*0.25, '#333');
+                drawPixelRect(x + s*0.05, y + s*0.7, s*0.2, s*0.25, '#333');
+
+                // Boss-specific details
+                if (bossType === 0) {
+                    // Cleaner - broom
+                    drawPixelRect(x + s*0.35, y + s*0.1, s*0.08, s*0.7, '#8B4513');
+                    drawPixelRect(x + s*0.25, y + s*0.7, s*0.25, s*0.15, '#DAA520');
+                } else if (bossType === 3) {
+                    // Guard - hat
+                    drawPixelRect(x - s*0.25, y - s*0.15, s*0.5, s*0.15, '#1a1a1a');
+                } else if (bossType === 4) {
+                    // Witch - hat
+                    drawPixelRect(x - s*0.3, y - s*0.1, s*0.6, s*0.12, '#800080');
+                    drawPixelRect(x - s*0.15, y - s*0.4, s*0.3, s*0.35, '#800080');
+                }
+            }
+
+            // HP bar
+            const barW = s * 1.2;
+            const barH = s * 0.12;
+            const barX = x - barW/2;
+            const barY = y - s * 0.3;
+            drawPixelRect(barX - 2, barY - 2, barW + 4, barH + 4, '#333');
+            drawPixelRect(barX, barY, barW, barH, '#500');
+            drawPixelRect(barX, barY, barW * (hp / maxHp), barH, '#F00');
+        }
+
+        function drawPoopSprite(x, y, size) {
+            const s = size;
+            ctx.fillStyle = '#8B4513';
+            drawPixelRect(x - s*0.3, y - s*0.2, s*0.6, s*0.5, '#8B4513');
+            drawPixelRect(x - s*0.4, y, s*0.8, s*0.3, '#8B4513');
+            drawPixelRect(x - s*0.2, y - s*0.4, s*0.4, s*0.25, '#A0522D');
+            // Highlight
+            drawPixelRect(x - s*0.1, y - s*0.3, s*0.1, s*0.1, '#D2691E');
+        }
+
+        function drawProjectileSprite(x, y, size, type) {
+            const s = size;
+            if (type === 'boss') {
+                ctx.fillStyle = '#FF0000';
+                ctx.beginPath();
+                ctx.arc(x, y, s*0.4, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FF6600';
+                ctx.beginPath();
+                ctx.arc(x, y, s*0.25, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+
+        // ============================================
+        // UI DRAWING
+        // ============================================
+
+        function drawButton(x, y, w, h, text, active = false, enabled = true) {
+            const color = !enabled ? '#444' : active ? '#FFD700' : '#666';
+            const textColor = !enabled ? '#666' : '#FFF';
+
+            drawPixelRect(x, y, w, h, '#222');
+            drawPixelRect(x + 2, y + 2, w - 4, h - 4, color);
+
+            ctx.fillStyle = textColor;
+            ctx.font = `bold ${h * 0.4}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x + w/2, y + h/2);
+
+            return { x, y, w, h, text };
+        }
+
+        function drawItemIcon(x, y, size, type) {
+            const s = size;
+            switch(type) {
+                case 'bread':
+                    drawPixelRect(x - s*0.4, y - s*0.2, s*0.8, s*0.4, '#DEB887');
+                    drawPixelRect(x - s*0.35, y - s*0.3, s*0.7, s*0.15, '#D2691E');
+                    break;
+                case 'chili':
+                    drawPixelRect(x - s*0.15, y - s*0.4, s*0.3, s*0.7, '#FF0000');
+                    drawPixelRect(x - s*0.1, y - s*0.5, s*0.1, s*0.15, '#228B22');
+                    break;
+                case 'shield':
+                    drawPixelRect(x - s*0.3, y - s*0.35, s*0.6, s*0.5, '#4169E1');
+                    drawPixelRect(x - s*0.25, y + s*0.1, s*0.5, s*0.25, '#4169E1');
+                    drawPixelRect(x - s*0.15, y - s*0.25, s*0.3, s*0.35, '#87CEEB');
+                    break;
+                case 'feather':
+                    ctx.fillStyle = '#DDD';
+                    ctx.beginPath();
+                    ctx.ellipse(x, y, s*0.15, s*0.4, 0.3, 0, Math.PI*2);
+                    ctx.fill();
+                    drawPixelRect(x - s*0.02, y - s*0.4, s*0.04, s*0.8, '#AAA');
+                    break;
+                case 'gem':
+                    ctx.fillStyle = '#00CED1';
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - s*0.35);
+                    ctx.lineTo(x + s*0.3, y);
+                    ctx.lineTo(x, y + s*0.35);
+                    ctx.lineTo(x - s*0.3, y);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.fillStyle = '#40E0D0';
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - s*0.2);
+                    ctx.lineTo(x + s*0.15, y);
+                    ctx.lineTo(x, y + s*0.1);
+                    ctx.closePath();
+                    ctx.fill();
+                    break;
+                case 'stone':
+                    ctx.fillStyle = '#9932CC';
+                    ctx.beginPath();
+                    ctx.arc(x, y, s*0.35, 0, Math.PI*2);
+                    ctx.fill();
+                    ctx.fillStyle = '#BA55D3';
+                    ctx.beginPath();
+                    ctx.arc(x - s*0.1, y - s*0.1, s*0.15, 0, Math.PI*2);
+                    ctx.fill();
+                    break;
+            }
+        }
+
+        function drawHeart(x, y, size, filled = true) {
+            ctx.fillStyle = filled ? '#FF4444' : '#444';
+            ctx.beginPath();
+            const s = size;
+            ctx.moveTo(x, y + s*0.3);
+            ctx.bezierCurveTo(x - s*0.5, y, x - s*0.5, y - s*0.35, x, y - s*0.15);
+            ctx.bezierCurveTo(x + s*0.5, y - s*0.35, x + s*0.5, y, x, y + s*0.3);
+            ctx.fill();
+        }
+
+        function drawCloud(x, y, size) {
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            const s = size * scale;
+            ctx.beginPath();
+            ctx.arc(x, y, s * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + s * 0.4, y - s * 0.2, s * 0.4, 0, Math.PI * 2);
+            ctx.arc(x + s * 0.8, y, s * 0.5, 0, Math.PI * 2);
+            ctx.arc(x + s * 0.4, y + s * 0.2, s * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ============================================
+        // RESIZE
         // ============================================
 
         function resize() {
@@ -301,41 +694,34 @@
                 bird.x = W / 2;
                 bird.y = H * 0.2;
             }
-
-            joystickBase.x = 80 * scale;
-            joystickBase.y = H - 100 * scale;
         }
 
         // ============================================
-        // TOUCH HANDLERS
+        // INPUT HANDLERS
         // ============================================
 
         function handleTouchStart(e) {
             e.preventDefault();
+            initAudio();
+
             for (let touch of e.changedTouches) {
                 const x = touch.clientX;
                 const y = touch.clientY;
 
-                if (gameState === 'MENU') {
-                    gameState = 'PLAYING';
-                    resetGame();
-                    return;
-                }
+                // Check button clicks
+                if (handleButtonClick(x, y)) return;
 
-                if (gameState === 'GAME_OVER') {
-                    gameState = 'MENU';
-                    return;
-                }
-
-                if (x < W / 2) {
-                    touchLeft = touch.identifier;
-                    joystickPos.x = x;
-                    joystickPos.y = y;
-                    joystickBase.x = x;
-                    joystickBase.y = y;
-                } else {
-                    touchRight = touch.identifier;
-                    isPooping = true;
+                if (gameState === 'PLAYING' || gameState === 'BOSS_BATTLE') {
+                    if (x < W / 2) {
+                        touchLeft = touch.identifier;
+                        joystickBase.x = x;
+                        joystickBase.y = y;
+                        joystickPos.x = x;
+                        joystickPos.y = y;
+                    } else {
+                        touchRight = touch.identifier;
+                        isPooping = true;
+                    }
                 }
             }
         }
@@ -355,8 +741,6 @@
             for (let touch of e.changedTouches) {
                 if (touch.identifier === touchLeft) {
                     touchLeft = null;
-                    joystickPos.x = joystickBase.x;
-                    joystickPos.y = joystickBase.y;
                 }
                 if (touch.identifier === touchRight) {
                     touchRight = null;
@@ -365,18 +749,28 @@
             }
         }
 
-        // Keyboard support
+        function handleButtonClick(x, y) {
+            for (let btn of buttons) {
+                if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                    if (btn.action) {
+                        btn.action();
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
         const keys = {};
         function handleKeyDown(e) {
             keys[e.code] = true;
-            if (gameState === 'MENU' && e.code === 'Space') {
-                gameState = 'PLAYING';
-                resetGame();
-            }
-            if (gameState === 'GAME_OVER' && e.code === 'Space') {
-                gameState = 'MENU';
-            }
+            initAudio();
+
+            if (e.code === 'Digit1') useItem(0);
+            if (e.code === 'Digit2') useItem(1);
+            if (e.code === 'Digit3') useItem(2);
         }
+
         function handleKeyUp(e) {
             keys[e.code] = false;
         }
@@ -385,175 +779,413 @@
         // GAME LOGIC
         // ============================================
 
-        function resetGame() {
-            bird.x = W / 2;
-            bird.y = H * 0.2;
-            bird.energy = ENERGY_MAX;
-            bird.hp = 3;
+        function startStage(stageIndex) {
+            currentStage = stageIndex;
+            gameState = 'PLAYING';
+            stageStartTime = Date.now();
+            stageTime = 0;
             score = 0;
             combo = 0;
+            bossWarningShown = false;
+            bossSpawned = false;
+            boss = null;
+
+            bird.x = W / 2;
+            bird.y = H * 0.2;
+            bird.hp = bird.maxHp;
+            bird.maxEnergy = ENERGY_MAX_BASE + saveData.upgrades.energy * 20;
+            bird.energy = bird.maxEnergy;
+            bird.shieldActive = false;
+            bird.chiliActive = false;
+
             poops = [];
             humans = [];
             particles = [];
+            projectiles = [];
+            floatingTexts = [];
             lastHumanSpawn = Date.now();
         }
 
         function spawnHuman() {
-            const type = Math.floor(Math.random() * 3);
+            const stage = STAGES[currentStage];
+            const typeIndex = stage.humanTypes[Math.floor(Math.random() * stage.humanTypes.length)];
+            const h = HUMANS[typeIndex];
             const fromLeft = Math.random() > 0.5;
-            const speeds = [1.5, 3, 2];
-            const points = [10, 25, 20];
+            const speedMult = isHellMode ? 1.5 : 1;
 
             humans.push({
-                x: fromLeft ? -20 : W + 20,
-                y: H - GROUND_HEIGHT - 64 * scale,
-                width: 16,
-                height: 32,
-                type: type,
-                speed: speeds[type] * scale * (fromLeft ? 1 : -1),
-                points: points[type],
-                hit: false
+                x: fromLeft ? -30 : W + 30,
+                y: H - GROUND_HEIGHT - 60 * scale,
+                type: typeIndex,
+                speed: h.speed * scale * speedMult * (fromLeft ? 1 : -1),
+                points: h.points,
+                hit: false,
+                hitTime: 0
             });
+        }
+
+        function spawnBoss() {
+            const stage = STAGES[currentStage];
+            const b = BOSSES[stage.boss];
+            const hpMult = isHellMode ? 1.8 : 1;
+
+            boss = {
+                x: W / 2,
+                y: H - GROUND_HEIGHT - 100 * scale,
+                type: stage.boss,
+                hp: b.hp * hpMult,
+                maxHp: b.hp * hpMult,
+                speed: b.speed * scale,
+                direction: 1,
+                lastFire: Date.now(),
+                fireRate: b.fireRate
+            };
+
+            gameState = 'BOSS_BATTLE';
+            playSound('warning');
         }
 
         function shootPoop() {
             const now = Date.now();
             if (now - lastPoopTime < POOP_COOLDOWN) return;
-            if (bird.energy < ENERGY_COST) return;
+            if (!bird.chiliActive && bird.energy < ENERGY_COST) return;
 
-            bird.energy -= ENERGY_COST;
+            if (!bird.chiliActive) {
+                bird.energy -= ENERGY_COST;
+            }
             lastPoopTime = now;
+
+            const speedMult = 1 + saveData.upgrades.poopSpeed * 0.15;
+            const birdData = BIRDS[saveData.currentBird];
 
             poops.push({
                 x: bird.x,
-                y: bird.y + bird.height,
-                width: 8,
-                height: 8,
-                speed: POOP_SPEED * scale
+                y: bird.y + bird.height * scale,
+                speed: POOP_BASE_SPEED * scale * speedMult * birdData.speed,
+                damage: birdData.damage * (1 + saveData.upgrades.damage * 0.2)
+            });
+
+            playSound('poop');
+        }
+
+        function useItem(index) {
+            const items = ['bread', 'chili', 'shield'];
+            const item = items[index];
+
+            if (saveData.items[item] <= 0) return;
+            if (gameState !== 'PLAYING' && gameState !== 'BOSS_BATTLE') return;
+
+            saveData.items[item]--;
+            playSound('item');
+
+            switch(item) {
+                case 'bread':
+                    bird.hp = Math.min(bird.maxHp, bird.hp + 1);
+                    addFloatingText(bird.x, bird.y, '+1 HP', '#00FF00');
+                    break;
+                case 'chili':
+                    bird.chiliActive = true;
+                    bird.chiliEndTime = Date.now() + 8000;
+                    addFloatingText(bird.x, bird.y, 'UNLIMITED!', '#FF4500');
+                    break;
+                case 'shield':
+                    bird.shieldActive = true;
+                    addFloatingText(bird.x, bird.y, 'SHIELD!', '#4169E1');
+                    break;
+            }
+
+            saveGame();
+        }
+
+        function addFloatingText(x, y, text, color) {
+            floatingTexts.push({
+                x, y, text, color,
+                life: 60,
+                vy: -2 * scale
             });
         }
 
-        function createSplat(x, y) {
-            for (let i = 0; i < 8; i++) {
-                const angle = (Math.PI * 2 / 8) * i;
+        function createParticles(x, y, color, count = 8) {
+            for (let i = 0; i < count; i++) {
+                const angle = (Math.PI * 2 / count) * i;
                 particles.push({
-                    x: x,
-                    y: y,
+                    x, y,
                     vx: Math.cos(angle) * 3 * scale,
                     vy: Math.sin(angle) * 3 * scale,
                     life: 30,
-                    color: '#8B4513'
+                    color
                 });
             }
         }
 
-        function update() {
-            if (gameState !== 'PLAYING') return;
+        function takeDamage() {
+            if (bird.shieldActive) {
+                bird.shieldActive = false;
+                addFloatingText(bird.x, bird.y, 'BLOCKED!', '#4169E1');
+                playSound('item');
+                return;
+            }
 
+            bird.hp--;
+            combo = 0;
+            playSound('hurt');
+            createParticles(bird.x, bird.y, '#FF0000', 12);
+
+            if (bird.hp <= 0) {
+                gameOver();
+            }
+        }
+
+        function gameOver() {
+            gameState = 'GAME_OVER';
+            if (score > saveData.highScore) {
+                saveData.highScore = score;
+            }
+            saveGame();
+        }
+
+        function stageClear() {
+            gameState = 'STAGE_CLEAR';
+            playSound('victory');
+
+            // Calculate rewards
+            const featherReward = 50 + currentStage * 20 + Math.floor(score / 10);
+            const gemReward = 10 + currentStage * 5;
+            const stoneChance = 0.3 + saveData.upgrades.luck * 0.05;
+            const stoneReward = Math.random() < stoneChance ? 1 : 0;
+
+            saveData.feathers += featherReward;
+            saveData.gems += gemReward;
+            saveData.stones += stoneReward;
+
+            // Calculate stars
+            const stage = STAGES[currentStage];
+            let stars = 1;
+            if (bird.hp === bird.maxHp) stars++;
+            if (score >= stage.duration * 5) stars++;
+
+            if (stars > saveData.stageStars[currentStage]) {
+                saveData.stageStars[currentStage] = stars;
+            }
+
+            // Unlock next stage
+            if (currentStage + 1 < STAGES.length && saveData.unlockedStages <= currentStage + 1) {
+                saveData.unlockedStages = currentStage + 2;
+            }
+
+            saveGame();
+        }
+
+        function update() {
             const now = Date.now();
 
-            // Bird movement from joystick
-            if (touchLeft !== null) {
-                const dx = joystickPos.x - joystickBase.x;
-                const dy = joystickPos.y - joystickBase.y;
-                const dist = Math.sqrt(dx * dx + dy * dy);
-                const maxDist = 50 * scale;
+            if (gameState === 'PLAYING' || gameState === 'BOSS_BATTLE') {
+                // Stage time
+                stageTime = (now - stageStartTime) / 1000;
+                const stage = STAGES[currentStage];
+                const progress = stageTime / stage.duration;
 
-                if (dist > 5) {
-                    const speed = Math.min(dist / maxDist, 1) * 5 * scale;
-                    bird.x += (dx / dist) * speed;
-                    bird.y += (dy / dist) * speed;
-                }
-            }
-
-            // Keyboard movement
-            const moveSpeed = 5 * scale;
-            if (keys['ArrowLeft'] || keys['KeyA']) bird.x -= moveSpeed;
-            if (keys['ArrowRight'] || keys['KeyD']) bird.x += moveSpeed;
-            if (keys['ArrowUp'] || keys['KeyW']) bird.y -= moveSpeed;
-            if (keys['ArrowDown'] || keys['KeyS']) bird.y += moveSpeed;
-
-            // Constrain bird to upper area
-            const maxY = H * BIRD_AREA_PERCENT;
-            bird.x = Math.max(bird.width, Math.min(W - bird.width, bird.x));
-            bird.y = Math.max(bird.height, Math.min(maxY, bird.y));
-
-            // Shooting
-            if (isPooping || keys['Space']) {
-                shootPoop();
-            }
-
-            // Energy regen
-            bird.energy = Math.min(ENERGY_MAX, bird.energy + ENERGY_REGEN);
-
-            // Combo timeout
-            if (combo > 0 && now - lastHitTime > COMBO_TIMEOUT) {
-                combo = 0;
-            }
-
-            // Spawn humans
-            if (now - lastHumanSpawn > HUMAN_SPAWN_INTERVAL) {
-                spawnHuman();
-                lastHumanSpawn = now;
-            }
-
-            // Update poops
-            for (let i = poops.length - 1; i >= 0; i--) {
-                const poop = poops[i];
-                poop.y += poop.speed;
-
-                if (poop.y > H) {
-                    poops.splice(i, 1);
-                    continue;
-                }
-
-                // Check collision with humans
-                for (let j = humans.length - 1; j >= 0; j--) {
-                    const human = humans[j];
-                    if (human.hit) continue;
-
-                    const hx = human.x;
-                    const hy = human.y;
-                    const hw = human.width * 2 * scale;
-                    const hh = human.height * 2 * scale;
-
-                    if (poop.x > hx - hw/2 && poop.x < hx + hw/2 &&
-                        poop.y > hy && poop.y < hy + hh) {
-                        human.hit = true;
-                        poops.splice(i, 1);
-
-                        combo++;
-                        lastHitTime = now;
-
-                        const multiplier = 1 + (combo - 1) * 0.1;
-                        const points = Math.floor(human.points * multiplier);
-                        score += points;
-
-                        createSplat(poop.x, poop.y);
-                        break;
+                // Check for boss warning/spawn
+                if (gameState === 'PLAYING') {
+                    if (progress >= 0.7 && !bossWarningShown) {
+                        bossWarningShown = true;
+                        addFloatingText(W/2, H/3, 'BOSS INCOMING!', '#FF0000');
+                        playSound('warning');
+                    }
+                    if (progress >= 0.8 && !bossSpawned) {
+                        bossSpawned = true;
+                        spawnBoss();
                     }
                 }
-            }
 
-            // Update humans
-            for (let i = humans.length - 1; i >= 0; i--) {
-                const human = humans[i];
-                human.x += human.speed;
+                // Bird movement
+                const birdSpeed = 5 * scale * (1 + saveData.upgrades.speed * 0.1) * BIRDS[saveData.currentBird].speed;
 
-                if (human.x < -50 || human.x > W + 50 || human.hit) {
-                    humans.splice(i, 1);
+                if (touchLeft !== null) {
+                    const dx = joystickPos.x - joystickBase.x;
+                    const dy = joystickPos.y - joystickBase.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist > 5) {
+                        const speed = Math.min(dist / (50 * scale), 1) * birdSpeed;
+                        bird.x += (dx / dist) * speed;
+                        bird.y += (dy / dist) * speed;
+                    }
                 }
-            }
 
-            // Update particles
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.vy += 0.2 * scale;
-                p.life--;
-                if (p.life <= 0) {
-                    particles.splice(i, 1);
+                if (keys['ArrowLeft'] || keys['KeyA']) bird.x -= birdSpeed;
+                if (keys['ArrowRight'] || keys['KeyD']) bird.x += birdSpeed;
+                if (keys['ArrowUp'] || keys['KeyW']) bird.y -= birdSpeed;
+                if (keys['ArrowDown'] || keys['KeyS']) bird.y += birdSpeed;
+
+                // Constrain bird
+                const maxY = H * BIRD_AREA_PERCENT;
+                bird.x = Math.max(30, Math.min(W - 30, bird.x));
+                bird.y = Math.max(50, Math.min(maxY, bird.y));
+
+                // Shooting
+                if (isPooping || keys['Space']) {
+                    shootPoop();
+                }
+
+                // Energy regen
+                bird.energy = Math.min(bird.maxEnergy, bird.energy + ENERGY_REGEN);
+
+                // Chili timeout
+                if (bird.chiliActive && now > bird.chiliEndTime) {
+                    bird.chiliActive = false;
+                }
+
+                // Combo timeout
+                if (combo > 0 && now - lastHitTime > COMBO_TIMEOUT) {
+                    combo = 0;
+                }
+
+                // Spawn humans (only in PLAYING state)
+                if (gameState === 'PLAYING') {
+                    const spawnInt = isHellMode ? stage.spawnInterval * 0.7 : stage.spawnInterval;
+                    if (now - lastHumanSpawn > spawnInt) {
+                        spawnHuman();
+                        lastHumanSpawn = now;
+                    }
+                }
+
+                // Update poops
+                for (let i = poops.length - 1; i >= 0; i--) {
+                    const poop = poops[i];
+                    poop.y += poop.speed;
+
+                    if (poop.y > H) {
+                        poops.splice(i, 1);
+                        continue;
+                    }
+
+                    // Check human collision
+                    for (let j = humans.length - 1; j >= 0; j--) {
+                        const human = humans[j];
+                        if (human.hit) continue;
+
+                        const hw = 30 * scale;
+                        const hh = 60 * scale;
+
+                        if (poop.x > human.x - hw && poop.x < human.x + hw &&
+                            poop.y > human.y && poop.y < human.y + hh) {
+                            human.hit = true;
+                            human.hitTime = now;
+                            poops.splice(i, 1);
+
+                            combo++;
+                            lastHitTime = now;
+
+                            const multiplier = 1 + (combo - 1) * 0.1;
+                            const points = Math.floor(human.points * multiplier);
+                            score += points;
+
+                            // Currency drops
+                            saveData.feathers += Math.floor(1 + combo * 0.5);
+
+                            createParticles(poop.x, poop.y, '#8B4513');
+                            addFloatingText(human.x, human.y, '+' + points, '#FFD700');
+
+                            playSound('hit');
+                            if (combo >= 2) playSound('combo');
+                            break;
+                        }
+                    }
+
+                    // Check boss collision
+                    if (boss && poop.y > boss.y - 50 * scale && poop.y < boss.y + 80 * scale &&
+                        poop.x > boss.x - 60 * scale && poop.x < boss.x + 60 * scale) {
+                        boss.hp -= poop.damage * 10;
+                        poops.splice(i, 1);
+                        createParticles(poop.x, poop.y, '#8B4513');
+                        playSound('bossHit');
+
+                        if (boss.hp <= 0) {
+                            // Boss defeated
+                            createParticles(boss.x, boss.y, '#FF0000', 20);
+                            boss = null;
+                            stageClear();
+                        }
+                    }
+                }
+
+                // Update humans
+                for (let i = humans.length - 1; i >= 0; i--) {
+                    const human = humans[i];
+                    if (!human.hit) {
+                        human.x += human.speed;
+                    }
+
+                    // Remove off-screen or hit humans
+                    if (human.x < -50 || human.x > W + 50 ||
+                        (human.hit && now - human.hitTime > 500)) {
+                        humans.splice(i, 1);
+                    }
+                }
+
+                // Update boss
+                if (boss) {
+                    boss.x += boss.speed * boss.direction;
+                    if (boss.x < 80 || boss.x > W - 80) {
+                        boss.direction *= -1;
+                    }
+
+                    // Boss shooting
+                    const fireRate = isHellMode ? boss.fireRate * 0.7 : boss.fireRate;
+                    if (now - boss.lastFire > fireRate) {
+                        boss.lastFire = now;
+
+                        const shots = isHellMode ? 2 : 1;
+                        for (let i = 0; i < shots; i++) {
+                            const angle = Math.atan2(bird.y - boss.y, bird.x - boss.x);
+                            const spread = isHellMode ? (i - 0.5) * 0.3 : 0;
+                            projectiles.push({
+                                x: boss.x,
+                                y: boss.y - 30 * scale,
+                                vx: Math.cos(angle + spread) * 5 * scale,
+                                vy: Math.sin(angle + spread) * 5 * scale
+                            });
+                        }
+                    }
+                }
+
+                // Update projectiles
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const p = projectiles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+
+                    // Remove off-screen
+                    if (p.x < 0 || p.x > W || p.y < 0 || p.y > H) {
+                        projectiles.splice(i, 1);
+                        continue;
+                    }
+
+                    // Check bird collision
+                    const dx = p.x - bird.x;
+                    const dy = p.y - bird.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < 25 * scale) {
+                        projectiles.splice(i, 1);
+                        takeDamage();
+                    }
+                }
+
+                // Update particles
+                for (let i = particles.length - 1; i >= 0; i--) {
+                    const p = particles[i];
+                    p.x += p.vx;
+                    p.y += p.vy;
+                    p.vy += 0.2 * scale;
+                    p.life--;
+                    if (p.life <= 0) particles.splice(i, 1);
+                }
+
+                // Update floating texts
+                for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                    const t = floatingTexts[i];
+                    t.y += t.vy;
+                    t.life--;
+                    if (t.life <= 0) floatingTexts.splice(i, 1);
                 }
             }
         }
@@ -562,128 +1194,200 @@
         // RENDERING
         // ============================================
 
-        function drawBackground() {
+        function render() {
+            ctx.clearRect(0, 0, W, H);
+            buttons = [];
+
+            switch(gameState) {
+                case 'MENU': renderMenu(); break;
+                case 'STAGE_SELECT': renderStageSelect(); break;
+                case 'PLAYING':
+                case 'BOSS_BATTLE': renderGame(); break;
+                case 'STAGE_CLEAR': renderStageClear(); break;
+                case 'GAME_OVER': renderGameOver(); break;
+                case 'SHOP': renderShop(); break;
+            }
+        }
+
+        function renderBackground() {
+            const stage = STAGES[currentStage];
+
             // Sky gradient
             const gradient = ctx.createLinearGradient(0, 0, 0, H);
-            gradient.addColorStop(0, '#87CEEB');
-            gradient.addColorStop(0.5, '#B0E0E6');
-            gradient.addColorStop(1, '#98FB98');
+            gradient.addColorStop(0, stage.skyTop);
+            gradient.addColorStop(0.6, stage.skyBottom);
+            gradient.addColorStop(1, stage.ground);
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, W, H);
 
             // Clouds
-            ctx.fillStyle = '#FFFFFF';
             const time = Date.now() / 50;
             for (let i = 0; i < 5; i++) {
-                const cx = ((time + i * 200) % (W + 100)) - 50;
-                const cy = 50 + i * 40 * scale;
-                drawCloud(cx, cy, 30 + i * 10);
+                const cx = ((time + i * 200) % (W + 150)) - 75;
+                const cy = 60 + i * 35 * scale;
+                drawCloud(cx, cy, 25 + i * 8);
             }
 
             // Ground
-            ctx.fillStyle = '#8FBC8F';
+            ctx.fillStyle = stage.ground;
             ctx.fillRect(0, H - GROUND_HEIGHT, W, GROUND_HEIGHT);
 
             // Path
-            ctx.fillStyle = '#D2B48C';
-            ctx.fillRect(0, H - GROUND_HEIGHT, W, 20 * scale);
+            ctx.fillStyle = stage.path;
+            ctx.fillRect(0, H - GROUND_HEIGHT, W, 25 * scale);
         }
 
-        function drawCloud(x, y, size) {
-            const s = size * scale;
-            ctx.beginPath();
-            ctx.arc(x, y, s * 0.5, 0, Math.PI * 2);
-            ctx.arc(x + s * 0.4, y - s * 0.2, s * 0.4, 0, Math.PI * 2);
-            ctx.arc(x + s * 0.8, y, s * 0.5, 0, Math.PI * 2);
-            ctx.arc(x + s * 0.4, y + s * 0.2, s * 0.35, 0, Math.PI * 2);
-            ctx.fill();
-        }
+        function renderGame() {
+            renderBackground();
 
-        function drawBird() {
-            const pixelSize = 2 * scale;
-            const spriteW = 24 * pixelSize;
-            const spriteH = 24 * pixelSize;
-            drawSprite(BIRD_SPRITE, bird.x - spriteW/2, bird.y - spriteH/2, pixelSize);
-        }
-
-        function drawHumans() {
-            const pixelSize = 2 * scale;
+            // Humans
             for (const human of humans) {
-                if (!human.hit) {
-                    const sprite = HUMAN_SPRITES[human.type];
-                    const spriteW = 16 * pixelSize;
-                    const spriteH = 32 * pixelSize;
-                    drawSprite(sprite, human.x - spriteW/2, human.y, pixelSize);
-                }
+                drawHumanSprite(human.x, human.y, human.type, 50 * scale, human.hit);
             }
-        }
 
-        function drawPoops() {
-            const pixelSize = 2 * scale;
+            // Boss
+            if (boss) {
+                drawBossSprite(boss.x, boss.y, boss.type, 70 * scale, boss.hp, boss.maxHp);
+            }
+
+            // Poops
             for (const poop of poops) {
-                const spriteW = 8 * pixelSize;
-                const spriteH = 8 * pixelSize;
-                drawSprite(POOP_SPRITE, poop.x - spriteW/2, poop.y - spriteH/2, pixelSize);
+                drawPoopSprite(poop.x, poop.y, 16 * scale);
             }
-        }
 
-        function drawParticles() {
+            // Projectiles
+            for (const p of projectiles) {
+                drawProjectileSprite(p.x, p.y, 20 * scale, 'boss');
+            }
+
+            // Particles
             for (const p of particles) {
                 ctx.fillStyle = p.color;
-                const size = 4 * scale * (p.life / 30);
+                const size = 6 * scale * (p.life / 30);
                 ctx.fillRect(p.x - size/2, p.y - size/2, size, size);
             }
+
+            // Bird
+            const birdSize = 50 * scale;
+            drawBirdSprite(bird.x, bird.y, saveData.currentBird, birdSize);
+
+            // Shield effect
+            if (bird.shieldActive) {
+                ctx.strokeStyle = '#4169E1';
+                ctx.lineWidth = 3 * scale;
+                ctx.beginPath();
+                ctx.arc(bird.x, bird.y, birdSize * 0.7, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Chili effect
+            if (bird.chiliActive) {
+                ctx.strokeStyle = '#FF4500';
+                ctx.lineWidth = 2 * scale;
+                ctx.beginPath();
+                ctx.arc(bird.x, bird.y, birdSize * 0.8, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Floating texts
+            for (const t of floatingTexts) {
+                ctx.fillStyle = t.color;
+                ctx.font = `bold ${18 * scale}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.globalAlpha = t.life / 60;
+                ctx.fillText(t.text, t.x, t.y);
+                ctx.globalAlpha = 1;
+            }
+
+            // UI
+            renderGameUI();
         }
 
-        function drawUI() {
-            // Energy bar background
-            const barX = 20 * scale;
-            const barY = 20 * scale;
-            const barW = 120 * scale;
-            const barH = 16 * scale;
+        function renderGameUI() {
+            const stage = STAGES[currentStage];
+            const progress = Math.min(1, stageTime / stage.duration);
+
+            // Top bar background
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(0, 0, W, 90 * scale);
+
+            // Bird icon
+            drawBirdSprite(30 * scale, 25 * scale, saveData.currentBird, 25 * scale);
+
+            // Energy bar
+            const barX = 55 * scale;
+            const barY = 15 * scale;
+            const barW = 100 * scale;
+            const barH = 14 * scale;
 
             ctx.fillStyle = '#333';
-            ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-            ctx.fillStyle = '#555';
             ctx.fillRect(barX, barY, barW, barH);
-            ctx.fillStyle = '#FFD700';
-            ctx.fillRect(barX, barY, barW * (bird.energy / ENERGY_MAX), barH);
+            ctx.fillStyle = bird.chiliActive ? '#FF4500' : '#FFD700';
+            ctx.fillRect(barX, barY, barW * (bird.energy / bird.maxEnergy), barH);
+            ctx.strokeStyle = '#FFF';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barW, barH);
 
             // HP hearts
-            const heartSize = 20 * scale;
-            for (let i = 0; i < 3; i++) {
-                ctx.fillStyle = i < bird.hp ? '#FF4444' : '#444';
-                drawHeart(barX + i * (heartSize + 5), barY + barH + 10, heartSize);
+            for (let i = 0; i < bird.maxHp; i++) {
+                drawHeart(60 * scale + i * 22 * scale, 42 * scale, 16 * scale, i < bird.hp);
             }
 
             // Score
             ctx.fillStyle = '#FFF';
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 3 * scale;
-            ctx.font = `bold ${24 * scale}px monospace`;
+            ctx.font = `bold ${20 * scale}px monospace`;
             ctx.textAlign = 'right';
-            const scoreText = score.toString().padStart(6, '0');
-            ctx.strokeText(scoreText, W - 20 * scale, 36 * scale);
-            ctx.fillText(scoreText, W - 20 * scale, 36 * scale);
+            ctx.fillText(score.toString().padStart(6, '0'), W - 15 * scale, 30 * scale);
+
+            // Currency
+            ctx.font = `${12 * scale}px monospace`;
+            drawItemIcon(W - 90 * scale, 50 * scale, 12 * scale, 'feather');
+            ctx.fillText(saveData.feathers, W - 75 * scale, 54 * scale);
+            drawItemIcon(W - 45 * scale, 50 * scale, 12 * scale, 'gem');
+            ctx.textAlign = 'left';
+            ctx.fillText(saveData.gems, W - 35 * scale, 54 * scale);
+
+            // Progress bar
+            const progY = 70 * scale;
+            ctx.fillStyle = '#333';
+            ctx.fillRect(W/2 - 80*scale, progY, 160*scale, 12*scale);
+
+            for (let i = 0; i < 10; i++) {
+                const dotX = W/2 - 72*scale + i * 16*scale;
+                const filled = progress >= (i + 1) / 10;
+                ctx.fillStyle = filled ? (i >= 8 ? '#FF4444' : '#4CAF50') : '#666';
+                ctx.beginPath();
+                ctx.arc(dotX, progY + 6*scale, 4*scale, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            // Stage name
+            ctx.fillStyle = '#FFF';
+            ctx.font = `${10 * scale}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText(`STAGE ${currentStage + 1}: ${stage.name}`, W/2, progY - 5*scale);
 
             // Combo
             if (combo >= 2) {
                 ctx.fillStyle = '#FF6600';
-                ctx.font = `bold ${20 * scale}px monospace`;
-                ctx.textAlign = 'center';
-                const comboText = 'x' + combo + ' COMBO';
-                ctx.strokeText(comboText, W / 2, 60 * scale);
-                ctx.fillText(comboText, W / 2, 60 * scale);
+                ctx.font = `bold ${24 * scale}px monospace`;
+                ctx.fillText(`x${combo} COMBO!`, W/2, 110 * scale);
             }
 
-            // Joystick indicator
+            // Difficulty badge
+            if (isHellMode) {
+                ctx.fillStyle = '#FF0000';
+                ctx.font = `bold ${12 * scale}px monospace`;
+                ctx.fillText('HELL MODE', W/2, H * 0.12);
+            }
+
+            // Joystick (when active)
             if (touchLeft !== null) {
                 ctx.globalAlpha = 0.3;
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
                 ctx.arc(joystickBase.x, joystickBase.y, 50 * scale, 0, Math.PI * 2);
                 ctx.fill();
-
                 ctx.globalAlpha = 0.5;
                 ctx.beginPath();
                 ctx.arc(joystickPos.x, joystickPos.y, 25 * scale, 0, Math.PI * 2);
@@ -691,105 +1395,454 @@
                 ctx.globalAlpha = 1;
             }
 
-            // Poop button hint
-            ctx.globalAlpha = 0.2;
+            // Poop button
+            ctx.globalAlpha = isPooping ? 0.5 : 0.3;
             ctx.fillStyle = '#8B4513';
             ctx.beginPath();
-            ctx.arc(W - 80 * scale, H - 100 * scale, 50 * scale, 0, Math.PI * 2);
+            ctx.arc(W - 70 * scale, H - 90 * scale, 50 * scale, 0, Math.PI * 2);
             ctx.fill();
+            drawPoopSprite(W - 70 * scale, H - 90 * scale, 30 * scale);
             ctx.globalAlpha = 1;
+
+            // Item buttons
+            const items = [
+                { key: 'bread', count: saveData.items.bread },
+                { key: 'chili', count: saveData.items.chili },
+                { key: 'shield', count: saveData.items.shield }
+            ];
+
+            for (let i = 0; i < 3; i++) {
+                const ix = W - 130 * scale + i * 45 * scale;
+                const iy = H - 170 * scale;
+                const item = items[i];
+
+                ctx.fillStyle = item.count > 0 ? 'rgba(255,255,255,0.3)' : 'rgba(100,100,100,0.3)';
+                ctx.fillRect(ix - 18*scale, iy - 18*scale, 36*scale, 36*scale);
+
+                drawItemIcon(ix, iy, 20 * scale, item.key);
+
+                ctx.fillStyle = '#FFF';
+                ctx.font = `${10 * scale}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText(item.count, ix, iy + 28*scale);
+                ctx.fillText(i + 1, ix, iy - 22*scale);
+
+                buttons.push({
+                    x: ix - 18*scale, y: iy - 18*scale,
+                    w: 36*scale, h: 50*scale,
+                    action: () => useItem(i)
+                });
+            }
         }
 
-        function drawHeart(x, y, size) {
-            ctx.beginPath();
-            const topY = y + size * 0.3;
-            ctx.moveTo(x + size/2, y + size);
-            ctx.bezierCurveTo(x, y + size * 0.7, x, topY, x + size/4, topY);
-            ctx.bezierCurveTo(x + size/2, topY - size * 0.2, x + size/2, topY, x + size/2, y + size * 0.5);
-            ctx.bezierCurveTo(x + size/2, topY, x + size/2, topY - size * 0.2, x + size * 0.75, topY);
-            ctx.bezierCurveTo(x + size, topY, x + size, y + size * 0.7, x + size/2, y + size);
-            ctx.fill();
-        }
-
-        function drawMenu() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        function renderMenu() {
+            // Background
+            const gradient = ctx.createLinearGradient(0, 0, 0, H);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#98FB98');
+            ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, W, H);
+
+            // Clouds
+            const time = Date.now() / 50;
+            for (let i = 0; i < 6; i++) {
+                const cx = ((time + i * 180) % (W + 150)) - 75;
+                const cy = 80 + i * 50 * scale;
+                drawCloud(cx, cy, 30 + i * 10);
+            }
 
             // Title
             ctx.fillStyle = '#FFD700';
-            ctx.strokeStyle = '#000';
+            ctx.strokeStyle = '#8B4513';
             ctx.lineWidth = 4 * scale;
-            ctx.font = `bold ${48 * scale}px monospace`;
+            ctx.font = `bold ${42 * scale}px monospace`;
             ctx.textAlign = 'center';
-            ctx.strokeText('BIRD DROP', W/2, H * 0.3);
-            ctx.fillText('BIRD DROP', W/2, H * 0.3);
+            ctx.strokeText('BIRD DROP', W/2, H * 0.2);
+            ctx.fillText('BIRD DROP', W/2, H * 0.2);
+
+            ctx.font = `bold ${18 * scale}px monospace`;
+            ctx.fillStyle = '#666';
+            ctx.fillText('ver 2', W/2, H * 0.25);
 
             // Bird preview
-            const pixelSize = 4 * scale;
-            drawSprite(BIRD_SPRITE, W/2 - 48 * scale, H * 0.4, pixelSize);
+            drawBirdSprite(W/2, H * 0.38, saveData.currentBird, 80 * scale);
 
-            // Instructions
-            ctx.fillStyle = '#FFF';
-            ctx.font = `${18 * scale}px monospace`;
-            ctx.fillText('TAP TO START', W/2, H * 0.7);
-
-            ctx.font = `${14 * scale}px monospace`;
-            ctx.fillStyle = '#AAA';
-            ctx.fillText('Left: Move  |  Right: Poop', W/2, H * 0.78);
-
-            if (highScore > 0) {
+            // High score
+            if (saveData.highScore > 0) {
                 ctx.fillStyle = '#FFD700';
-                ctx.fillText('HIGH SCORE: ' + highScore, W/2, H * 0.86);
+                ctx.font = `${14 * scale}px monospace`;
+                ctx.fillText(`HIGH SCORE: ${saveData.highScore}`, W/2, H * 0.5);
             }
+
+            // Buttons
+            const btnW = 180 * scale;
+            const btnH = 50 * scale;
+            const btnX = W/2 - btnW/2;
+
+            buttons.push({
+                ...drawButton(btnX, H * 0.58, btnW, btnH, 'PLAY'),
+                action: () => { gameState = 'STAGE_SELECT'; }
+            });
+
+            buttons.push({
+                ...drawButton(btnX, H * 0.68, btnW, btnH, 'SHOP'),
+                action: () => { gameState = 'SHOP'; shopTab = 0; }
+            });
+
+            // Difficulty toggle
+            const diffBtnW = 140 * scale;
+            buttons.push({
+                ...drawButton(W/2 - diffBtnW/2, H * 0.82, diffBtnW, 35 * scale,
+                    isHellMode ? 'HELL MODE' : 'NORMAL', isHellMode),
+                action: () => { isHellMode = !isHellMode; }
+            });
+
+            // Currency display
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(10*scale, H - 50*scale, W - 20*scale, 40*scale);
+
+            ctx.fillStyle = '#FFF';
+            ctx.font = `${14 * scale}px monospace`;
+            ctx.textAlign = 'left';
+
+            drawItemIcon(30*scale, H - 30*scale, 15*scale, 'feather');
+            ctx.fillText(saveData.feathers, 50*scale, H - 26*scale);
+
+            drawItemIcon(W/2 - 30*scale, H - 30*scale, 15*scale, 'gem');
+            ctx.fillText(saveData.gems, W/2 - 10*scale, H - 26*scale);
+
+            drawItemIcon(W - 80*scale, H - 30*scale, 15*scale, 'stone');
+            ctx.fillText(saveData.stones, W - 60*scale, H - 26*scale);
         }
 
-        function drawGameOver() {
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        function renderStageSelect() {
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.fillStyle = '#FFF';
+            ctx.font = `bold ${24 * scale}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('SELECT STAGE', W/2, 50 * scale);
+
+            const cols = 2;
+            const btnW = (W - 60*scale) / cols;
+            const btnH = 80 * scale;
+
+            for (let i = 0; i < STAGES.length; i++) {
+                const stage = STAGES[i];
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const x = 20*scale + col * (btnW + 10*scale);
+                const y = 80*scale + row * (btnH + 15*scale);
+
+                const unlocked = i < saveData.unlockedStages;
+                const stars = saveData.stageStars[i];
+
+                ctx.fillStyle = unlocked ? stage.skyTop : '#333';
+                ctx.fillRect(x, y, btnW, btnH);
+
+                ctx.fillStyle = unlocked ? '#FFF' : '#666';
+                ctx.font = `bold ${14 * scale}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText(`${i + 1}. ${stage.name}`, x + btnW/2, y + 25*scale);
+
+                ctx.font = `${11 * scale}px monospace`;
+                ctx.fillText(stage.nameKr, x + btnW/2, y + 42*scale);
+
+                // Stars
+                for (let s = 0; s < 3; s++) {
+                    ctx.fillStyle = s < stars ? '#FFD700' : '#444';
+                    ctx.beginPath();
+                    const sx = x + btnW/2 - 20*scale + s * 20*scale;
+                    const sy = y + 60*scale;
+                    // Simple star
+                    ctx.arc(sx, sy, 6*scale, 0, Math.PI*2);
+                    ctx.fill();
+                }
+
+                if (unlocked) {
+                    buttons.push({
+                        x, y, w: btnW, h: btnH,
+                        action: () => startStage(i)
+                    });
+                }
+            }
+
+            // Back button
+            buttons.push({
+                ...drawButton(W/2 - 60*scale, H - 70*scale, 120*scale, 45*scale, 'BACK'),
+                action: () => { gameState = 'MENU'; }
+            });
+        }
+
+        function renderStageClear() {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, W, H);
+
+            ctx.fillStyle = '#4CAF50';
+            ctx.font = `bold ${36 * scale}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('STAGE CLEAR!', W/2, H * 0.25);
+
+            const stage = STAGES[currentStage];
+            ctx.fillStyle = '#FFF';
+            ctx.font = `${18 * scale}px monospace`;
+            ctx.fillText(`${stage.name} COMPLETED`, W/2, H * 0.33);
+
+            ctx.font = `bold ${24 * scale}px monospace`;
+            ctx.fillText(`SCORE: ${score}`, W/2, H * 0.45);
+
+            // Stars
+            const stars = saveData.stageStars[currentStage];
+            for (let i = 0; i < 3; i++) {
+                ctx.fillStyle = i < stars ? '#FFD700' : '#444';
+                ctx.beginPath();
+                ctx.arc(W/2 - 40*scale + i * 40*scale, H * 0.55, 15*scale, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            // Rewards
+            ctx.fillStyle = '#FFF';
+            ctx.font = `${14 * scale}px monospace`;
+            ctx.fillText('REWARDS:', W/2, H * 0.65);
+
+            const btnW = 150 * scale;
+            buttons.push({
+                ...drawButton(W/2 - btnW/2, H * 0.75, btnW, 45*scale, 'CONTINUE'),
+                action: () => { gameState = 'STAGE_SELECT'; }
+            });
+        }
+
+        function renderGameOver() {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
             ctx.fillRect(0, 0, W, H);
 
             ctx.fillStyle = '#FF4444';
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 4 * scale;
-            ctx.font = `bold ${40 * scale}px monospace`;
+            ctx.font = `bold ${36 * scale}px monospace`;
             ctx.textAlign = 'center';
-            ctx.strokeText('GAME OVER', W/2, H * 0.35);
-            ctx.fillText('GAME OVER', W/2, H * 0.35);
+            ctx.fillText('GAME OVER', W/2, H * 0.3);
 
             ctx.fillStyle = '#FFF';
-            ctx.font = `${24 * scale}px monospace`;
-            ctx.fillText('SCORE: ' + score, W/2, H * 0.5);
+            ctx.font = `${20 * scale}px monospace`;
+            ctx.fillText(`SCORE: ${score}`, W/2, H * 0.42);
 
-            if (score > highScore) {
-                highScore = score;
+            if (score >= saveData.highScore && score > 0) {
                 ctx.fillStyle = '#FFD700';
-                ctx.fillText('NEW HIGH SCORE!', W/2, H * 0.58);
+                ctx.fillText('NEW HIGH SCORE!', W/2, H * 0.5);
             }
 
-            ctx.fillStyle = '#AAA';
-            ctx.font = `${16 * scale}px monospace`;
-            ctx.fillText('TAP TO CONTINUE', W/2, H * 0.75);
+            const btnW = 150 * scale;
+            buttons.push({
+                ...drawButton(W/2 - btnW/2, H * 0.62, btnW, 45*scale, 'RETRY'),
+                action: () => startStage(currentStage)
+            });
+
+            buttons.push({
+                ...drawButton(W/2 - btnW/2, H * 0.72, btnW, 45*scale, 'MENU'),
+                action: () => { gameState = 'MENU'; }
+            });
         }
 
-        function render() {
-            ctx.clearRect(0, 0, W, H);
+        function renderShop() {
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, W, H);
 
-            drawBackground();
+            ctx.fillStyle = '#FFD700';
+            ctx.font = `bold ${24 * scale}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.fillText('SHOP', W/2, 40 * scale);
 
-            if (gameState === 'PLAYING') {
-                drawHumans();
-                drawPoops();
-                drawParticles();
-                drawBird();
-                drawUI();
-            } else if (gameState === 'MENU') {
-                drawMenu();
-            } else if (gameState === 'GAME_OVER') {
-                drawHumans();
-                drawPoops();
-                drawBird();
-                drawUI();
-                drawGameOver();
+            // Currency bar
+            ctx.fillStyle = 'rgba(255,255,255,0.1)';
+            ctx.fillRect(10*scale, 55*scale, W - 20*scale, 30*scale);
+
+            ctx.fillStyle = '#FFF';
+            ctx.font = `${12 * scale}px monospace`;
+            ctx.textAlign = 'left';
+
+            drawItemIcon(25*scale, 70*scale, 12*scale, 'feather');
+            ctx.fillText(saveData.feathers, 42*scale, 74*scale);
+
+            drawItemIcon(W/2 - 25*scale, 70*scale, 12*scale, 'gem');
+            ctx.fillText(saveData.gems, W/2 - 8*scale, 74*scale);
+
+            drawItemIcon(W - 70*scale, 70*scale, 12*scale, 'stone');
+            ctx.fillText(saveData.stones, W - 53*scale, 74*scale);
+
+            // Tabs
+            const tabW = (W - 30*scale) / 3;
+            const tabs = ['ITEMS', 'UPGRADE', 'EVOLVE'];
+
+            for (let i = 0; i < 3; i++) {
+                const tx = 10*scale + i * (tabW + 5*scale);
+                const ty = 95*scale;
+
+                ctx.fillStyle = shopTab === i ? '#4CAF50' : '#333';
+                ctx.fillRect(tx, ty, tabW, 35*scale);
+
+                ctx.fillStyle = '#FFF';
+                ctx.font = `${12 * scale}px monospace`;
+                ctx.textAlign = 'center';
+                ctx.fillText(tabs[i], tx + tabW/2, ty + 22*scale);
+
+                buttons.push({
+                    x: tx, y: ty, w: tabW, h: 35*scale,
+                    action: () => { shopTab = i; }
+                });
             }
+
+            // Content area
+            const contentY = 145 * scale;
+            const contentH = H - contentY - 80*scale;
+
+            if (shopTab === 0) {
+                // Items tab
+                for (let i = 0; i < SHOP_ITEMS.length; i++) {
+                    const item = SHOP_ITEMS[i];
+                    const y = contentY + i * 70*scale;
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(15*scale, y, W - 30*scale, 60*scale);
+
+                    drawItemIcon(50*scale, y + 30*scale, 25*scale, item.icon);
+
+                    ctx.fillStyle = '#FFF';
+                    ctx.font = `bold ${14 * scale}px monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText(item.name, 85*scale, y + 22*scale);
+
+                    ctx.font = `${11 * scale}px monospace`;
+                    ctx.fillStyle = '#AAA';
+                    ctx.fillText(item.desc, 85*scale, y + 40*scale);
+
+                    ctx.fillStyle = '#FFF';
+                    ctx.fillText(`Own: ${saveData.items[item.icon]}`, 85*scale, y + 55*scale);
+
+                    const canBuy = saveData.feathers >= item.price;
+                    const btnX = W - 90*scale;
+
+                    buttons.push({
+                        ...drawButton(btnX, y + 12*scale, 70*scale, 36*scale,
+                            `${item.price}`, false, canBuy),
+                        action: () => {
+                            if (canBuy) {
+                                saveData.feathers -= item.price;
+                                saveData.items[item.icon]++;
+                                playSound('buy');
+                                saveGame();
+                            }
+                        }
+                    });
+                }
+            } else if (shopTab === 1) {
+                // Upgrades tab
+                for (let i = 0; i < SHOP_UPGRADES.length; i++) {
+                    const upg = SHOP_UPGRADES[i];
+                    const key = upg.name.toLowerCase().replace('poopspeed', 'poopSpeed');
+                    const level = saveData.upgrades[key] || 0;
+                    const price = upg.basePrice * (level + 1);
+                    const maxed = level >= upg.maxLevel;
+                    const y = contentY + i * 60*scale;
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(15*scale, y, W - 30*scale, 52*scale);
+
+                    ctx.fillStyle = '#FFF';
+                    ctx.font = `bold ${13 * scale}px monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText(upg.name, 25*scale, y + 18*scale);
+
+                    ctx.font = `${10 * scale}px monospace`;
+                    ctx.fillStyle = '#AAA';
+                    ctx.fillText(upg.desc, 25*scale, y + 32*scale);
+
+                    // Level pips
+                    for (let l = 0; l < upg.maxLevel; l++) {
+                        ctx.fillStyle = l < level ? '#4CAF50' : '#444';
+                        ctx.fillRect(25*scale + l * 15*scale, y + 40*scale, 12*scale, 6*scale);
+                    }
+
+                    if (!maxed) {
+                        const canBuy = saveData.gems >= price;
+                        buttons.push({
+                            ...drawButton(W - 85*scale, y + 10*scale, 65*scale, 32*scale,
+                                `${price}`, false, canBuy),
+                            action: () => {
+                                if (canBuy) {
+                                    saveData.gems -= price;
+                                    saveData.upgrades[key]++;
+                                    playSound('buy');
+                                    saveGame();
+                                }
+                            }
+                        });
+                    } else {
+                        ctx.fillStyle = '#4CAF50';
+                        ctx.font = `${12 * scale}px monospace`;
+                        ctx.textAlign = 'center';
+                        ctx.fillText('MAX', W - 52*scale, y + 30*scale);
+                    }
+                }
+            } else {
+                // Evolution tab
+                for (let i = 0; i < BIRDS.length; i++) {
+                    const b = BIRDS[i];
+                    const y = contentY + i * 58*scale;
+                    const owned = saveData.unlockedBirds[i];
+                    const selected = saveData.currentBird === i;
+
+                    ctx.fillStyle = selected ? 'rgba(76,175,80,0.3)' : 'rgba(255,255,255,0.1)';
+                    ctx.fillRect(15*scale, y, W - 30*scale, 50*scale);
+
+                    drawBirdSprite(50*scale, y + 25*scale, i, 30*scale);
+
+                    ctx.fillStyle = '#FFF';
+                    ctx.font = `bold ${13 * scale}px monospace`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText(b.name, 80*scale, y + 20*scale);
+
+                    ctx.font = `${10 * scale}px monospace`;
+                    ctx.fillStyle = '#AAA';
+                    ctx.fillText(`SPD:${b.speed.toFixed(1)} DMG:${b.damage.toFixed(1)}`, 80*scale, y + 35*scale);
+
+                    if (owned) {
+                        if (selected) {
+                            ctx.fillStyle = '#4CAF50';
+                            ctx.font = `${12 * scale}px monospace`;
+                            ctx.textAlign = 'center';
+                            ctx.fillText('EQUIPPED', W - 52*scale, y + 28*scale);
+                        } else {
+                            buttons.push({
+                                ...drawButton(W - 85*scale, y + 10*scale, 65*scale, 30*scale, 'SELECT'),
+                                action: () => {
+                                    saveData.currentBird = i;
+                                    saveGame();
+                                }
+                            });
+                        }
+                    } else if (b.cost > 0) {
+                        const canBuy = saveData.stones >= b.cost;
+                        buttons.push({
+                            ...drawButton(W - 85*scale, y + 10*scale, 65*scale, 30*scale,
+                                `${b.cost}`, false, canBuy),
+                            action: () => {
+                                if (canBuy) {
+                                    saveData.stones -= b.cost;
+                                    saveData.unlockedBirds[i] = true;
+                                    playSound('buy');
+                                    saveGame();
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
+            // Back button
+            buttons.push({
+                ...drawButton(W/2 - 60*scale, H - 60*scale, 120*scale, 45*scale, 'BACK'),
+                action: () => { gameState = 'MENU'; }
+            });
         }
 
         // ============================================
@@ -807,13 +1860,33 @@
         // ============================================
 
         function init() {
+            loadGame();
             resize();
+
             window.addEventListener('resize', resize);
 
             canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
             canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
             canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
             canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+
+            // Mouse support for desktop
+            canvas.addEventListener('mousedown', (e) => {
+                handleTouchStart({ preventDefault: () => {}, changedTouches: [{
+                    identifier: 0, clientX: e.clientX, clientY: e.clientY
+                }]});
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                if (touchLeft === 0) {
+                    joystickPos.x = e.clientX;
+                    joystickPos.y = e.clientY;
+                }
+            });
+            canvas.addEventListener('mouseup', () => {
+                touchLeft = null;
+                touchRight = null;
+                isPooping = false;
+            });
 
             document.addEventListener('keydown', handleKeyDown);
             document.addEventListener('keyup', handleKeyUp);
